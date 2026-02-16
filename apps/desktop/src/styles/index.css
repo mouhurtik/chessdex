@@ -1,0 +1,441 @@
+/* ─── ChessDex Design System ──────────────────────────────────── */
+
+:root {
+  /* Colors — Dark theme (Chessbase-inspired) */
+  --bg-primary: #1a1b1e;
+  --bg-secondary: #25262b;
+  --bg-tertiary: #2c2e33;
+  --bg-hover: #373a40;
+  --bg-active: #4263eb22;
+
+  --text-primary: #e8e9ec;
+  --text-secondary: #909296;
+  --text-muted: #5c5f66;
+
+  --accent-primary: #4263eb;
+  --accent-hover: #3b5bdb;
+  --accent-light: #4263eb33;
+  --accent-success: #40c057;
+  --accent-warning: #fd7e14;
+  --accent-danger: #fa5252;
+
+  --border-color: #373a40;
+  --border-subtle: #2c2e33;
+
+  /* Board colors */
+  --board-light: #b0c4de;
+  --board-dark: #4682b4;
+
+  /* Sizing */
+  --sidebar-width: 56px;
+  --sidebar-expanded: 220px;
+  --header-height: 40px;
+  --panel-min-width: 280px;
+
+  /* Typography */
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+}
+
+/* ─── Reset & Base ───────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: 13px;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Prevent text selection during drag */
+  user-select: none;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ─── Layout ─────────────────────────────────────────────────── */
+
+.app-layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.app-sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 4px;
+  z-index: 10;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-header {
+  height: var(--header-height);
+  min-height: var(--header-height);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  /* Tauri draggable title bar */
+  -webkit-app-region: drag;
+}
+
+.app-header * {
+  -webkit-app-region: no-drag;
+}
+
+.app-header .logo {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--accent-primary);
+  letter-spacing: -0.3px;
+}
+
+.app-header .page-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.app-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ─── Sidebar Navigation ─────────────────────────────────────── */
+
+.nav-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.nav-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nav-btn.active {
+  background: var(--accent-light);
+  color: var(--accent-primary);
+}
+
+.nav-btn.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--accent-primary);
+  border-radius: 0 2px 2px 0;
+}
+
+.nav-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.nav-spacer {
+  flex: 1;
+}
+
+/* ─── Analysis Layout ────────────────────────────────────────── */
+
+.analysis-container {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  gap: 0;
+}
+
+.analysis-board-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  min-width: 400px;
+}
+
+.analysis-panel {
+  width: var(--panel-min-width);
+  min-width: var(--panel-min-width);
+  max-width: 360px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─── Panel Sections ─────────────────────────────────────────── */
+
+.panel-section {
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+}
+
+.panel-content {
+  padding: 10px 14px;
+  overflow-y: auto;
+}
+
+/* ─── Engine Eval Bar ────────────────────────────────────────── */
+
+.eval-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.eval-score {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 18px;
+  min-width: 52px;
+  text-align: center;
+}
+
+.eval-score.positive {
+  color: var(--accent-success);
+}
+
+.eval-score.negative {
+  color: var(--accent-danger);
+}
+
+.eval-score.neutral {
+  color: var(--text-secondary);
+}
+
+.eval-depth {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.eval-line {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Move Notation ──────────────────────────────────────────── */
+
+.notation-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px;
+}
+
+.notation-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  line-height: 1.8;
+}
+
+.move-number {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-right: 2px;
+  font-family: var(--font-mono);
+}
+
+.move-san {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition: background var(--transition-fast);
+}
+
+.move-san:hover {
+  background: var(--bg-hover);
+}
+
+.move-san.active {
+  background: var(--accent-primary);
+  color: white;
+}
+
+/* ─── Board Controls ─────────────────────────────────────────── */
+
+.board-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.board-controls button {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.board-controls button:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+/* ─── Chessboard Container ───────────────────────────────────── */
+
+.chessboard-wrapper {
+  position: relative;
+}
+
+.chessboard-container {
+  width: 100%;
+}
+
+/* Chessground board theme — blue */
+.chessboard-container .cg-wrap cg-board {
+  background: conic-gradient(var(--board-dark) 25%, var(--board-light) 0 50%, var(--board-dark) 0 75%, var(--board-light) 0) 0 0 / calc(100%/4) calc(100%/4) !important;
+}
+
+.chessboard-container .cg-wrap cg-board square.move-dest {
+  background: radial-gradient(rgba(20, 85, 30, 0.5) 22%, #208530 0, rgba(0, 0, 0, 0.3) 0, rgba(0, 0, 0, 0) 0) !important;
+}
+
+.chessboard-container .cg-wrap cg-board square.oc.move-dest {
+  background: radial-gradient(transparent 0%, transparent 80%, rgba(20, 85, 0, 0.3) 80%) !important;
+}
+
+.chessboard-container .cg-wrap cg-board square.move-dest:hover {
+  background: rgba(20, 85, 30, 0.3) !important;
+}
+
+.chessboard-container .cg-wrap cg-board square.last-move {
+  background-color: rgba(155, 199, 0, 0.41) !important;
+}
+
+.chessboard-container .cg-wrap cg-board square.selected {
+  background-color: rgba(20, 85, 30, 0.5) !important;
+}
+
+.chessboard-container .cg-wrap cg-board square.check {
+  background: radial-gradient(ellipse at center, rgba(255, 0, 0, 1) 0%, rgba(231, 0, 0, 1) 25%, rgba(169, 0, 0, 0) 89%, rgba(158, 0, 0, 0) 100%) !important;
+}
+
+/* ─── Empty State ────────────────────────────────────────────── */
+
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  gap: 8px;
+}
+
+.empty-state svg {
+  width: 40px;
+  height: 40px;
+  opacity: 0.4;
+}
+
+.empty-state p {
+  font-size: 12px;
+}
