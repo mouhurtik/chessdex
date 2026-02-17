@@ -1,7 +1,9 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import { Chess } from 'chess.js';
 import type { Square, PieceSymbol } from 'chess.js';
 import Chessboard from '../chess/Chessboard';
+import { useEngine } from '../../hooks/useEngine';
+import { formatScore, scoreClass } from '../../stores/engineStore';
 import { STARTING_FEN } from '@chessdex/shared';
 
 interface MoveEntry {
@@ -18,20 +20,34 @@ const AnalysisBoard: React.FC = () => {
     const [currentIndex, setCurrentIndex] = useState(-1);
     const [fen, setFen] = useState(STARTING_FEN);
     const [orientation, setOrientation] = useState<'white' | 'black'>('white');
+    const [engineEnabled, setEngineEnabled] = useState(true);
+
+    const {
+        isReady, isRunning, error, lines, currentDepth, multiPV,
+        setPosition, stop, updateMultiPV,
+    } = useEngine();
+
+    // Analyze whenever fen changes and engine is enabled
+    useEffect(() => {
+        if (isReady && engineEnabled) {
+            setPosition(fen);
+        } else if (!engineEnabled) {
+            stop();
+        }
+    }, [fen, isReady, engineEnabled]);
 
     const handleMove = useCallback(
         (from: Square, to: Square, newFen: string, san: string, promotion?: PieceSymbol) => {
             const entry: MoveEntry = { fen: newFen, san, from, to, promotion };
 
-            setMoves(prev => {
-                // If we're not at the end, truncate future moves (creating a new line)
-                const next = [...prev.slice(0, currentIndex + 1), entry];
-                return next;
+            // Use functional updater to avoid stale closure over currentIndex
+            setCurrentIndex(prevIdx => {
+                setMoves(prevMoves => [...prevMoves.slice(0, prevIdx + 1), entry]);
+                return prevIdx + 1;
             });
-            setCurrentIndex(prev => prev + 1);
             setFen(newFen);
         },
-        [currentIndex]
+        []
     );
 
     const goToMove = useCallback(
@@ -51,28 +67,33 @@ const AnalysisBoard: React.FC = () => {
     const goLast = () => goToMove(moves.length - 1);
     const flipBoard = () => setOrientation(o => (o === 'white' ? 'black' : 'white'));
 
-    // Get last move for highlighting
+    const currentMoveEntry = currentIndex >= 0 && currentIndex < moves.length ? moves[currentIndex] : undefined;
     const lastMove: [string, string] | undefined =
-        currentIndex >= 0 ? [moves[currentIndex].from, moves[currentIndex].to] : undefined;
+        currentMoveEntry ? [currentMoveEntry.from, currentMoveEntry.to] : undefined;
+
+    // Determine perspective for score display
+    const isBlackTurn = fen.split(' ')[1] === 'b';
+
+    // Get best line score for eval bar
+    const bestLine = lines.find(l => l.multipv === 1);
+    const displayScore = bestLine
+        ? formatScore(bestLine.score, bestLine.scoreType)
+        : '0.00';
+    const displayScoreClass = bestLine
+        ? scoreClass(bestLine.score, bestLine.scoreType)
+        : 'neutral';
 
     // Keyboard shortcuts
-    React.useEffect(() => {
+    useEffect(() => {
         const handler = (e: KeyboardEvent) => {
-            if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                goPrev();
-            } else if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                goNext();
-            } else if (e.key === 'Home') {
-                e.preventDefault();
-                goFirst();
-            } else if (e.key === 'End') {
-                e.preventDefault();
-                goLast();
-            } else if (e.key === 'f' || e.key === 'F') {
-                flipBoard();
-            }
+            // Don't capture if user is typing in an input
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+            if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
+            else if (e.key === 'Home') { e.preventDefault(); goFirst(); }
+            else if (e.key === 'End') { e.preventDefault(); goLast(); }
+            else if (e.key === 'f' || e.key === 'F') { flipBoard(); }
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
@@ -92,7 +113,7 @@ const AnalysisBoard: React.FC = () => {
         <div className="analysis-container">
             {/* Board */}
             <div className="analysis-board-section">
-                <div className="chessboard-wrapper" style={{ width: '100%', maxWidth: '600px', aspectRatio: '1' }}>
+                <div className="chessboard-wrapper" style={{ flex: 1, width: '100%', aspectRatio: '1', maxHeight: 'calc(100vh - var(--header-height) - 80px)' }}>
                     <Chessboard
                         fen={fen}
                         orientation={orientation}
@@ -141,12 +162,79 @@ const AnalysisBoard: React.FC = () => {
 
             {/* Right Panel */}
             <div className="analysis-panel">
-                {/* Engine Eval (placeholder) */}
+                {/* Engine Eval Bar */}
                 <div className="eval-bar">
-                    <span className="eval-score neutral">0.0</span>
-                    <span className="eval-depth">d/0</span>
-                    <span className="eval-line">Engine not connected</span>
+                    <button
+                        className={`engine-toggle ${engineEnabled ? 'active' : ''}`}
+                        onClick={() => setEngineEnabled(e => !e)}
+                        title={engineEnabled ? 'Disable engine' : 'Enable engine'}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            {engineEnabled ? (
+                                <>
+                                    <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none" />
+                                </>
+                            ) : (
+                                <>
+                                    <line x1="10" y1="8" x2="10" y2="16" strokeWidth="3" />
+                                    <line x1="14" y1="8" x2="14" y2="16" strokeWidth="3" />
+                                </>
+                            )}
+                        </svg>
+                    </button>
+                    <span className={`eval-score ${displayScoreClass}`}>
+                        {displayScore}
+                    </span>
+                    <span className="eval-depth">
+                        d/{currentDepth}
+                    </span>
+                    {error ? (
+                        <span className="eval-line" style={{ color: 'var(--accent-danger)' }}>
+                            Error: {error}
+                        </span>
+                    ) : !isReady ? (
+                        <span className="eval-line">Loading engine…</span>
+                    ) : !engineEnabled ? (
+                        <span className="eval-line">Engine paused</span>
+                    ) : (
+                        <span className="eval-line">
+                            {bestLine?.pvUci || (isRunning ? 'Thinking…' : 'Ready')}
+                        </span>
+                    )}
                 </div>
+
+                {/* Engine Lines */}
+                {engineEnabled && lines.length > 0 && (
+                    <div className="panel-section engine-lines-section">
+                        <div className="panel-header">
+                            <span>Engine Lines</span>
+                            <select
+                                className="multipv-select"
+                                value={multiPV}
+                                onChange={(e) => updateMultiPV(parseInt(e.target.value, 10))}
+                                title="Number of lines"
+                            >
+                                <option value={1}>1 line</option>
+                                <option value={2}>2 lines</option>
+                                <option value={3}>3 lines</option>
+                                <option value={5}>5 lines</option>
+                            </select>
+                        </div>
+                        <div className="panel-content engine-lines">
+                            {lines.map((line) => (
+                                <div key={line.multipv} className="engine-line-row">
+                                    <span className={`engine-line-score ${scoreClass(line.score, line.scoreType)}`}>
+                                        {formatScore(line.score, line.scoreType)}
+                                    </span>
+                                    <span className="engine-line-pv">
+                                        {line.pvUci}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {/* Move Notation */}
                 <div className="panel-section" style={{ flex: 1 }}>
@@ -187,7 +275,7 @@ const AnalysisBoard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Info panel */}
+                {/* Position Info */}
                 <div className="panel-section">
                     <div className="panel-header">
                         <span>Position</span>

@@ -32,3 +32,35 @@ export {
     sideToMove,
     fullMoveNumber,
 } from './utils/fen.js';
+
+// Database
+export {
+    CREATE_TABLES_SQL,
+    SCHEMA_VERSION,
+    getCreateTableStatements,
+} from './database/schema.js';
+
+export type { SqlQuery } from './database/queries.js';
+export {
+    insertGameQuery,
+    getGameQuery,
+    getAllGamesQuery,
+    getGamesByFolderQuery,
+    searchGamesQuery,
+    updateGameNotesQuery,
+    toggleFavoriteQuery,
+    moveGameToFolderQuery,
+    deleteGameQuery,
+    createFolderQuery,
+    getAllFoldersQuery,
+    renameFolderQuery,
+    deleteFolderQuery,
+    createTagQuery,
+    getAllTagsQuery,
+    addTagToGameQuery,
+    removeTagFromGameQuery,
+    getTagsForGameQuery,
+    deleteTagQuery,
+    getGameCountQuery,
+    getFavoriteGamesQuery,
+} from './database/queries.js';
