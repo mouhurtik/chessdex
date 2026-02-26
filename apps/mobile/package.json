@@ -1,0 +1,31 @@
+{
+  "name": "@chessdex/mobile",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@chessdex/shared": "workspace:*",
+    "@expo/metro-runtime": "^6.1.2",
+    "expo": "~54.0.33",
+    "expo-document-picker": "~14.0.8",
+    "expo-file-system": "~19.0.15",
+    "expo-router": "~6.0.23",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-web": "^0.21.0",
+    "react-native-webview": "13.15.0",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

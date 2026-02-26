@@ -3,6 +3,7 @@ import { Chessground } from 'chessground';
 import { Chess } from 'chess.js';
 import type { Square, PieceSymbol } from 'chess.js';
 import type { Key } from 'chessground/types';
+import { usePreferencesStore } from '../../stores/preferencesStore';
 import 'chessground/assets/chessground.base.css';
 import 'chessground/assets/chessground.cburnett.css';
 
@@ -133,6 +134,25 @@ const Chessboard: React.FC<ChessboardProps> = ({
             groundRef.current = null;
         };
     }, [externalChess]);
+
+    // Apply board theme colors by overriding the inline conic-gradient
+    const boardTheme = usePreferencesStore(s => s.getBoardTheme());
+    useEffect(() => {
+        const applyTheme = () => {
+            if (!boardRef.current) return;
+            const cgBoard = boardRef.current.querySelector('cg-board') as HTMLElement | null;
+            if (!cgBoard) return;
+            const { lightSquare, darkSquare } = boardTheme;
+            const gradient = `conic-gradient(${darkSquare} 25%, ${lightSquare} 0deg, ${lightSquare} 50%, ${darkSquare} 0deg, ${darkSquare} 75%, ${lightSquare} 0deg)`;
+            cgBoard.style.backgroundImage = gradient;
+            cgBoard.style.backgroundSize = '25% 25%';
+        };
+        // Apply immediately and after chessground's own render
+        applyTheme();
+        requestAnimationFrame(applyTheme);
+        const t = setTimeout(applyTheme, 150);
+        return () => clearTimeout(t);
+    }, [boardTheme]);
 
     // Sync FEN, orientation, and lastMove
     useEffect(() => {

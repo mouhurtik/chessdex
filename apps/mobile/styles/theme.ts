@@ -1,0 +1,22 @@
+export const theme = {
+    colors: {
+        bgPrimary: '#1a1b1e',
+        bgSecondary: '#25262b',
+        bgTertiary: '#2c2e33',
+        bgHover: '#373a40',
+        bgActive: '#4263eb22',
+        textPrimary: '#e8e9ec',
+        textSecondary: '#909296',
+        textMuted: '#5c5f66',
+        accentPrimary: '#4263eb',
+        accentHover: '#3b5bdb',
+        accentLight: '#4263eb33',
+        accentSuccess: '#40c057',
+        accentWarning: '#fd7e14',
+        accentDanger: '#fa5252',
+        borderColor: '#373a40',
+        borderSubtle: '#2c2e33',
+        boardLight: '#b0c4de',
+        boardDark: '#4682b4',
+    },
+};

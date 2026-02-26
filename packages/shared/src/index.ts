@@ -22,6 +22,8 @@ export type { Chess, Square, PieceSymbol, Color } from './chess/types.js';
 // PGN parser
 export { parsePgn, gameToPgn, resetIdCounter } from './chess/pgn-parser.js';
 
+export { uciToSan } from './chess/notation.js';
+
 // FEN utilities
 export {
     isValidFen,

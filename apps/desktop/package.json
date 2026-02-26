@@ -18,7 +18,7 @@
         "chessground": "^9.2.1",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
-        "react-router-dom": "^7.5.0",
+        "react-router-dom": "^6.28.0",
         "stockfish": "^18.0.5",
         "zustand": "^5.0.11"
     },

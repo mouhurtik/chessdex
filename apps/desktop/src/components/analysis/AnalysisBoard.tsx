@@ -4,7 +4,7 @@ import type { Square, PieceSymbol } from 'chess.js';
 import Chessboard from '../chess/Chessboard';
 import { useEngine } from '../../hooks/useEngine';
 import { formatScore, scoreClass } from '../../stores/engineStore';
-import { STARTING_FEN } from '@chessdex/shared';
+import { STARTING_FEN, uciToSan } from '@chessdex/shared';
 
 interface MoveEntry {
     fen: string;
@@ -82,6 +82,8 @@ const AnalysisBoard: React.FC = () => {
     const displayScoreClass = bestLine
         ? scoreClass(bestLine.score, bestLine.scoreType)
         : 'neutral';
+    const bestLineSan = bestLine ? uciToSan(fen, bestLine.pv) : [];
+    const bestLineText = bestLineSan.length > 0 ? bestLineSan.join(' ') : bestLine?.pvUci;
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -199,7 +201,7 @@ const AnalysisBoard: React.FC = () => {
                         <span className="eval-line">Engine paused</span>
                     ) : (
                         <span className="eval-line">
-                            {bestLine?.pvUci || (isRunning ? 'Thinking…' : 'Ready')}
+                            {bestLineText || (isRunning ? 'Thinking…' : 'Ready')}
                         </span>
                     )}
                 </div>
@@ -228,7 +230,7 @@ const AnalysisBoard: React.FC = () => {
                                         {formatScore(line.score, line.scoreType)}
                                     </span>
                                     <span className="engine-line-pv">
-                                        {line.pvUci}
+                                        {(uciToSan(fen, line.pv).join(' ')) || line.pvUci}
                                     </span>
                                 </div>
                             ))}

@@ -2,39 +2,100 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useEngineStore, parseInfoLine } from '../stores/engineStore';
 
 /**
- * React hook for controlling the Stockfish engine.
+ * Engine state machine to prevent WASM crashes.
  * 
- * The stockfish npm package provides a standalone JS file that runs as its own
- * Web Worker — it auto-detects the worker environment and sets up UCI message
- * passing via postMessage/onmessage. We use it directly as the Worker URL.
+ * The Stockfish lite WASM build crashes with "RuntimeError: unreachable" when 
+ * it receives `position`, `go`, or `setoption` while a search is in progress.
  * 
- * Key: We must wait for 'readyok' after 'stop' before sending new commands,
- * otherwise the lite WASM build will crash with RuntimeError: unreachable.
+ * State transitions:
+ *   IDLE  ──(go)──►  SEARCHING
+ *   SEARCHING ──(stop)──►  STOPPING
+ *   STOPPING  ──(bestmove)──►  CONFIGURING
+ *   CONFIGURING ──(readyok)──►  IDLE  (then process queue)
+ *   IDLE ──(setoption+isready)──► CONFIGURING
  */
+
+type EnginePhase = 'IDLE' | 'SEARCHING' | 'STOPPING' | 'CONFIGURING';
+
+interface PendingAction {
+    type: 'analyze' | 'setOption';
+    fen?: string;
+    option?: string;
+    value?: string | number;
+}
+
 export function useEngine() {
     const workerRef = useRef<Worker | null>(null);
+    const phaseRef = useRef<EnginePhase>('IDLE');
     const currentFenRef = useRef<string>('');
-    const pendingFenRef = useRef<string | null>(null);
-    const waitingForReadyRef = useRef(false);
+    const queueRef = useRef<PendingAction[]>([]);
 
     const {
         isReady, isRunning, error, depth, multiPV, lines, currentDepth,
         setReady, setRunning, setError, clearLines, updateLine, setCurrentDepth,
     } = useEngineStore();
 
-    // Internal: start analysis for a given FEN (only call when engine is idle/ready)
-    const startAnalysis = useCallback((fen: string, worker: Worker) => {
-        const d = useEngineStore.getState().depth;
-        worker.postMessage(`position fen ${fen}`);
-        worker.postMessage(`go depth ${d}`);
-        setRunning(true);
+    // ── Process the next queued action ──────────────────────────
+    const processQueue = useCallback((worker: Worker) => {
+        if (phaseRef.current !== 'IDLE') return;
+
+        const queue = queueRef.current;
+        if (queue.length === 0) return;
+
+        // Collect all setOption actions first, then the last analyze action
+        const optionActions: PendingAction[] = [];
+        let analyzeAction: PendingAction | null = null;
+
+        // Drain queue — only keep the LAST analyze request (skip intermediate ones)
+        while (queue.length > 0) {
+            const action = queue.shift()!;
+            if (action.type === 'setOption') {
+                optionActions.push(action);
+            } else if (action.type === 'analyze') {
+                analyzeAction = action; // always overwrite — latest position wins
+            }
+        }
+
+        // Send all option changes  
+        if (optionActions.length > 0) {
+            for (const opt of optionActions) {
+                worker.postMessage(`setoption name ${opt.option} value ${opt.value}`);
+            }
+        }
+
+        // If we have a position to analyze, send it
+        if (analyzeAction && analyzeAction.fen) {
+            currentFenRef.current = analyzeAction.fen;
+            clearLines();
+            const d = useEngineStore.getState().depth;
+            worker.postMessage(`position fen ${analyzeAction.fen}`);
+            worker.postMessage(`go depth ${d}`);
+            phaseRef.current = 'SEARCHING';
+            setRunning(true);
+        } else if (optionActions.length > 0) {
+            // Options changed but no analyze — send isready to confirm, then re-analyze current position
+            if (currentFenRef.current) {
+                // Queue re-analysis of current position
+                queueRef.current.push({ type: 'analyze', fen: currentFenRef.current });
+            }
+            worker.postMessage('isready');
+            phaseRef.current = 'CONFIGURING';
+        }
+    }, [clearLines, setRunning]);
+
+    // ── Request engine to stop, then process queue ──────────────
+    const requestStop = useCallback((worker: Worker) => {
+        if (phaseRef.current === 'SEARCHING') {
+            worker.postMessage('stop');
+            phaseRef.current = 'STOPPING';
+            setRunning(false);
+        }
+        // If already STOPPING or CONFIGURING, just wait — queue will be processed eventually
     }, [setRunning]);
 
-    // Initialize engine worker
+    // ── Initialize engine worker ────────────────────────────────
     useEffect(() => {
         const worker = new Worker('/stockfish/stockfish-18-lite-single.js');
-
-        let uciOk = false;
 
         worker.onmessage = (event) => {
             const line = typeof event.data === 'string' ? event.data : event.data?.toString();
@@ -42,26 +103,20 @@ export function useEngine() {
 
             // UCI handshake completed
             if (line === 'uciok') {
-                uciOk = true;
                 setReady(true);
                 setError(null);
-                // Configure defaults
+                // Configure defaults — engine is idle at this point
                 worker.postMessage('setoption name MultiPV value 3');
                 worker.postMessage('isready');
+                phaseRef.current = 'CONFIGURING';
                 return;
             }
 
+            // Engine confirmed it's ready
             if (line === 'readyok') {
-                // If we were waiting for ready after a stop, now start the pending analysis
-                if (waitingForReadyRef.current) {
-                    waitingForReadyRef.current = false;
-                    const pendingFen = pendingFenRef.current;
-                    pendingFenRef.current = null;
-                    if (pendingFen) {
-                        currentFenRef.current = pendingFen;
-                        clearLines();
-                        startAnalysis(pendingFen, worker);
-                    }
+                if (phaseRef.current === 'CONFIGURING') {
+                    phaseRef.current = 'IDLE';
+                    processQueue(worker);
                 }
                 return;
             }
@@ -75,16 +130,13 @@ export function useEngine() {
                 }
             }
 
-            // bestmove means search finished
+            // Search finished
             if (line.startsWith('bestmove')) {
                 setRunning(false);
-                // If a new position came in while we were searching, analyze it now
-                const pendingFen = pendingFenRef.current;
-                if (pendingFen) {
-                    pendingFenRef.current = null;
-                    currentFenRef.current = pendingFen;
-                    clearLines();
-                    startAnalysis(pendingFen, worker);
+                if (phaseRef.current === 'SEARCHING' || phaseRef.current === 'STOPPING') {
+                    // Send isready to ensure engine is fully settled before next command
+                    worker.postMessage('isready');
+                    phaseRef.current = 'CONFIGURING';
                 }
             }
         };
@@ -92,108 +144,84 @@ export function useEngine() {
         worker.onerror = (err) => {
             setError(err.message || 'Engine error');
             setReady(false);
+            phaseRef.current = 'IDLE';
         };
 
         workerRef.current = worker;
-
-        // Start UCI handshake
         worker.postMessage('uci');
 
         return () => {
             worker.postMessage('quit');
             worker.terminate();
             workerRef.current = null;
+            phaseRef.current = 'IDLE';
+            queueRef.current = [];
             setReady(false);
             setRunning(false);
         };
     }, []);
 
-    // Send UCI command
+    // ── Public API ──────────────────────────────────────────────
+
     const sendCommand = useCallback((cmd: string) => {
         workerRef.current?.postMessage(cmd);
     }, []);
 
-    // Set position and start analysis (safe — waits for engine to be ready)
     const setPosition = useCallback((fen: string) => {
         const worker = workerRef.current;
         if (!worker) return;
 
-        const storeState = useEngineStore.getState();
+        // Queue this analysis request
+        queueRef.current.push({ type: 'analyze', fen });
 
-        // If engine is currently running or waiting for ready, queue this FEN
-        if (storeState.isRunning || waitingForReadyRef.current) {
-            pendingFenRef.current = fen;
-            // Send stop if running (readyok handler will pick up the pending FEN)
-            if (storeState.isRunning) {
-                worker.postMessage('stop');
-                worker.postMessage('isready');
-                waitingForReadyRef.current = true;
-                setRunning(false);
-            }
-            return;
+        if (phaseRef.current === 'SEARCHING') {
+            // Stop current search — bestmove → readyok → processQueue will pick up the new FEN
+            requestStop(worker);
+        } else if (phaseRef.current === 'IDLE') {
+            processQueue(worker);
         }
+        // If STOPPING or CONFIGURING, just wait — processQueue will fire when ready
+    }, [processQueue, requestStop]);
 
-        // Engine is idle — start immediately
-        currentFenRef.current = fen;
-        clearLines();
-        startAnalysis(fen, worker);
-    }, [sendCommand, clearLines, setRunning, startAnalysis]);
-
-    // Stop analysis
     const stop = useCallback(() => {
         const worker = workerRef.current;
         if (!worker) return;
-        worker.postMessage('stop');
-        worker.postMessage('isready');
-        waitingForReadyRef.current = true;
-        pendingFenRef.current = null; // Cancel any pending
+        queueRef.current = []; // Cancel all pending
+        if (phaseRef.current === 'SEARCHING') {
+            requestStop(worker);
+        }
         setRunning(false);
-    }, [setRunning]);
+    }, [setRunning, requestStop]);
 
-    // Start analysis on current position
     const start = useCallback(() => {
         if (currentFenRef.current) {
             setPosition(currentFenRef.current);
         }
     }, [setPosition]);
 
-    // Update multiPV setting
     const updateMultiPV = useCallback((newMultiPV: number) => {
         const worker = workerRef.current;
         if (!worker) return;
 
-        const wasRunning = useEngineStore.getState().isRunning;
-        if (wasRunning) {
-            worker.postMessage('stop');
-        }
-
         useEngineStore.getState().setMultiPV(newMultiPV);
-        worker.postMessage(`setoption name MultiPV value ${newMultiPV}`);
 
-        // Queue re-analysis after ready
+        // Queue the option change + re-analysis
+        queueRef.current.push({ type: 'setOption', option: 'MultiPV', value: newMultiPV });
         if (currentFenRef.current) {
-            pendingFenRef.current = currentFenRef.current;
-            worker.postMessage('isready');
-            waitingForReadyRef.current = true;
-            setRunning(false);
+            queueRef.current.push({ type: 'analyze', fen: currentFenRef.current });
         }
-    }, [setRunning]);
+
+        if (phaseRef.current === 'SEARCHING') {
+            requestStop(worker);
+        } else if (phaseRef.current === 'IDLE') {
+            processQueue(worker);
+        }
+
+        clearLines();
+    }, [clearLines, processQueue, requestStop]);
 
     return {
-        // State
-        isReady,
-        isRunning,
-        error,
-        lines,
-        currentDepth,
-        depth,
-        multiPV,
-
-        // Actions
-        setPosition,
-        start,
-        stop,
-        sendCommand,
-        updateMultiPV,
+        isReady, isRunning, error, lines, currentDepth, depth, multiPV,
+        setPosition, start, stop, sendCommand, updateMultiPV,
     };
 }
